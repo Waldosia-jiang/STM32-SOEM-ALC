@@ -275,7 +275,7 @@ void RS485_Receive_Data()
 				}
         // µÍËÙÄ£Ê½
 			  else if((Rx_Buf[5] & 0X20) == 0X20){
-				    vel_yy = 0.1;
+				    vel_yy = 0.075;
 					  RS485_10H_temp = 0X20;
 				} 
 				

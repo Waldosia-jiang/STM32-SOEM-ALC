@@ -404,6 +404,7 @@ void TIM8_UP_TIM13_IRQHandler(void)
 			 FLAG_10 = 0;		
 		}
 		
+		// ÎïÁªÍøÄ£¿é
 		if( FLAG_06++ == 10000){	 
 			 
 			 MB_WriteHoldingReg_06H( 0x06, 1 , RS485_06H);
