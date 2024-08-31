@@ -256,7 +256,7 @@ void RS485_Receive_Data()
 				else GPIO_ResetBits(GPIOE,GPIO_Pin_10);
 				
         // 高速模式,默认中等速度模式（底盘）
-			  if((Rx_Buf[5] & 0X01) == 0X01) vel = 0.7;				    
+			  if((Rx_Buf[5] & 0X01) == 0X01) vel = 1.2;				    
         // 正常模式
 				else if((Rx_Buf[5] & 0X03) == 0X00) vel = 0.3;			 
         // 低速模式
@@ -275,7 +275,7 @@ void RS485_Receive_Data()
 				}
         // 低速模式
 			  else if((Rx_Buf[5] & 0X20) == 0X20){
-				    vel_yy = 0.075;
+				    vel_yy = 0.12;
 					  RS485_10H_temp = 0X20;
 				} 
 				
