@@ -64,20 +64,18 @@ extern __IO uint8_t EthLinkStatus;
 
 /* Private function prototypes -----------------------------------------------*/
 static void TIM3_Config(uint16_t period , uint16_t prescaler);
+
 /* Private functions ---------------------------------------------------------*/
 //#define TRUE                1
 //#define FALSE               0
 
 extern int ec_slavecount;
 
-//char IOmap[4096];
-
 #define EC_TIMEOUTMON 500
 #define SYNC0TIME 1000
 
 #define D0 0.42
 #define L0 0.49
-
 #define M_PI 3.14159265358979323846
 #define Min_Turn_Radius  1.5      // 最小转弯半径2m
 #define Wheel_Radius     0.105  // 半径
@@ -89,70 +87,28 @@ __IO uint32_t pdoTimeFlag = 0;
 int dorun = 0;
 __IO uint32_t LocalTime = 0; /* this variable is used to create a time reference incremented by 10ms */
 
-//motor control 
-uint16 cur_status1;
-uint16 cur_status2;
+//motor control
+/* 控制状态：表示目前控制器的状态*/
+uint16 cur_status[9];
 
-uint16 cur_status3;
-uint16 cur_status4;
+/* PDO_Output 表示发送给伺服驱动器的数据*/
+/* PDO_Input  表示从伺服驱动器接收的数据*/
+PDO_Output *outputs[9];
+PDO_Input  *inputs[9];
 
-uint16 cur_status5;
-uint16 cur_status6;
-
-uint16 cur_status7;
-uint16 cur_status8;
-
-PDO_Output *outputs1;
-PDO_Input  *inputs1;
-PDO_Output *outputs2;
-PDO_Input  *inputs2;
-
-PDO_Output *outputs3;
-PDO_Input *inputs3;
-PDO_Output *outputs4;
-PDO_Input *inputs4;
-
-PDO_Output *outputs5;
-PDO_Input *inputs5;
-PDO_Output *outputs6;
-PDO_Input *inputs6;
-
-PDO_Output *outputs7;
-PDO_Input *inputs7;
-PDO_Output *outputs8;
-PDO_Input *inputs8;
 
 int DCdiff;
 
-int32 temp2 =0;
-int32 temp4 =0;
-int32 temp6 =0;
-int32 temp8 =0;
-
-int32 temp1 =0;
-int32 temp3 =0;
-int32 temp5 =0;
-int32 temp7 =0;
+/* temp 表示临时存储上一次的数据，其中temp[1]和temp[2]搭配使用，其他类似*/
+int32 temp[9] = {0};  
 
 uint8_t startup_step = 0;
 
-uint8_t servo1_on_setp = 0;
-uint8_t servo2_on_setp = 0;
-uint8_t servo3_on_setp = 0;
-uint8_t servo4_on_setp = 0;
-uint8_t servo5_on_setp = 0;
-uint8_t servo6_on_setp = 0;
-uint8_t servo7_on_setp = 0;
-uint8_t servo8_on_setp = 0;
+/* servo_on_setp[n]  表示按照Cia402协议初始化驱动器过程中驱动器的状态*/
+uint8_t servo_on_setp[9] ={0};
 
-uint8_t servo1_on = 0 ;
-uint8_t servo2_on = 0;
-uint8_t servo3_on = 0;
-uint8_t servo4_on = 0;
-uint8_t servo5_on = 0;
-uint8_t servo6_on = 0;
-uint8_t servo7_on = 0;
-uint8_t servo8_on = 0;
+/* servo_on[n]  表示驱动器是否进入使能状态*/
+uint8_t servo_on[9] = {0};
 
 int oloop, iloop;
 
@@ -215,7 +171,6 @@ int Servosetup(uint16 slave)
     retval += ec_SDOwrite(slave, 0x1c12, 0x01, FALSE, sizeof(u16val), &u16val, EC_TIMEOUTRXM);
     u8val = 1;
     retval += ec_SDOwrite(slave, 0x1c12, 0x00, FALSE, sizeof(u8val), &u8val, EC_TIMEOUTRXM);
-
 	
 	  u8val = 0;
     retval += ec_SDOwrite(slave, 0x1601, 0x00, FALSE, sizeof(u8val), &u8val, EC_TIMEOUTRXM);
@@ -267,37 +222,33 @@ void ecat_app(void){
 			wkc = ec_receive_processdata(EC_TIMEOUTRET);
 			//printf("%d ",wkc);
 	    
-	    if((inputs1->StatusWord & 0x0008) != 0x0008)
-			cur_status1 = inputs1->StatusWord & 0x00FF;//slave1
-			if((inputs2->StatusWord & 0x0008) != 0x0008)
-			cur_status2 = inputs2->StatusWord & 0x00FF;//slave2
-			if((inputs3->StatusWord & 0x0008) != 0x0008)
-	    cur_status3 = inputs3->StatusWord & 0x00FF;//slave3
-			if((inputs4->StatusWord & 0x0008) != 0x0008)
-			cur_status4 = inputs4->StatusWord & 0x00FF;//slave4
-			if((inputs5->StatusWord & 0x0008) != 0x0008)
-	    cur_status5 = inputs5->StatusWord & 0x00FF;//slave5
-			if((inputs6->StatusWord & 0x0008) != 0x0008)
-			cur_status6 = inputs6->StatusWord & 0x00FF;//slave6
-			if((inputs7->StatusWord & 0x0008) != 0x0008)
-	    cur_status7 = inputs7->StatusWord & 0x00FF;//slave7
-			if((inputs8->StatusWord & 0x0008) != 0x0008)
-			cur_status8 = inputs8->StatusWord & 0x00FF;//slave8
+	    /* 当驱动器没有报警，对驱动器的状态字进行屏蔽处理*/
+	    for(int i = 1;i <= 8;i++){
+				if((inputs[i]->StatusWord & 0x0008) != 0x0008)
+			      cur_status[i] = inputs[i]->StatusWord & 0x00FF;//slave1
+			}
 			
-	
-			double  R = 65535.0;
-			
+      /* 机器人底盘运动学逆解*/    				
+			/* 机器人底盘轮子的线速度和偏转角度，其中轮子定义顺序按照
+											forword
+							4                   1
+					
+							3                   2	
+											 back					
+			*/ 
+      double  R = 65535.0;
+      /*
+			   机器人底盘轮子的线速度和偏转角度
+			*/			
 	    double  V_1 = 0,V_2 = 0,V_3 = 0,V_4 = 0;
 			double  angle_1 = 0,angle_2 = 0,angle_3 = 0,angle_4 = 0;
 			
-  		double  V =   - Move_X ; //线速度
+  		double  V = - Move_X;       //线速度
+		  double  W =   Move_Y * 1.0; //角速度
+			double  Z =   Move_Z;       //原地转圈或者横移速度
 			
 //			printf("vel = %f \n \r",  vel);
 //			printf("vel_yy = %f \n \r",  vel_yy);
-			
-			double  W =   Move_Y * 1.0; //角速度
-			double  Z =   Move_Z;       //原地转圈或者横移速度
-			
 			int reverse = -1;
 			
 			//原地旋转
@@ -333,9 +284,10 @@ void ecat_app(void){
 							 angle_2 =    -1 / 4.0 * (2 * M_PI);
 				       angle_3 =     1 / 4.0 * (2 * M_PI);
 							 angle_4 =    -1 / 4.0 * (2 * M_PI);
-			}			
+			}	
+			
 			//前后反向偏转运动
-			if(fabs(V) >= 0.5 && fabs(W) >= 0.5 && fabs(Z) < 0.15){	
+			if(fabs(V) >= 0.1 && fabs(W) >= 0.1 && fabs(Z) < 0.15){	
 				     
 //				   printf("forword_back \n \r");
 						 R =  W / fabs(W) * fabs(V / W);
@@ -394,327 +346,147 @@ void ecat_app(void){
 			}		
 //			printf(" angle_1_4=%f , angle_2_3=%f , ", angle_1_4 , angle_2_3);
 			
-					switch(servo1_on_setp)
-								{
-										case 1:
-											
-											if(cur_status1 == 0x0031)
-													servo1_on_setp=2;
-											outputs1->ControlWord = 0x07;//0x6040
-												break;
-										case 2:
-												           
-											if(cur_status1==0x0033)
-											    servo1_on_setp=3;
-											outputs1->ControlWord = 0x0F;  
-												break;
-										case 3:              
-											if(cur_status1==0x0037)
-												 servo1_on = 1;										
-												break;            
-										default :
-												servo1_on_setp=1;
-												outputs1->ControlWord = 0x06;//0x6040
-										break;
-								}
-					switch(servo2_on_setp)
-					{
+			  /* 对8个伺服电机进行初始化*/
+				for (int i = 1; i <= 8; i++) {
+					switch (servo_on_setp[i]) {
 							case 1:
-								outputs2->ControlWord = 0x07;//0x6040
-								if(cur_status2 == 0x0031)
-											 servo2_on_setp=2;
+									outputs[i]->ControlWord = 0x07;  // 0x6040
+									if (cur_status[i] == 0x0031) {
+											servo_on_setp[i] = 2;
+									}
 									break;
 							case 2:
-									outputs2->ControlWord = 0x0F;             
-											if(cur_status2==0x0033)
-											 servo2_on_setp=3;
+									outputs[i]->ControlWord = 0x0F;
+									if (cur_status[i] == 0x0033) {
+											servo_on_setp[i] = 3;
+									}
 									break;
-							case 3:              
-											if(cur_status2==0x0037)
-											 servo2_on = 1;											
-									break;            
-							default :
-									servo2_on_setp=1;
-									outputs2->ControlWord = 0x06;//0x6040
-							break;
+							case 3:
+									if (cur_status[i] == 0x0037) {
+											servo_on[i] = 1;
+									}
+									break;
+							default:
+									servo_on_setp[i] = 1;
+									outputs[i]->ControlWord = 0x06;  // 0x6040
+									break;
 					}
-					switch(servo3_on_setp)
-					{
-							case 1:
-								outputs3->ControlWord = 0x07;//0x6040
-								if(cur_status3 == 0x0031)
-											 servo3_on_setp=2;
-									break;
-							case 2:
-									outputs3->ControlWord = 0x0F;             
-											if(cur_status3==0x0033)
-											 servo3_on_setp=3;
-									break;
-							case 3:              
-											if(cur_status3==0x0037)
-											 servo3_on = 1;											
-									break;            
-							default :
-									servo3_on_setp=1;
-									outputs3->ControlWord = 0x06;//0x6040
-							break;
-					}
-					switch(servo4_on_setp)
-					{
-							case 1:
-								outputs4->ControlWord = 0x07;//0x6040
-								if(cur_status4 == 0x0031)
-											 servo4_on_setp=2;
-									break;
-							case 2:
-									outputs4->ControlWord = 0x0F;             
-											if(cur_status4==0x0033)
-											 servo4_on_setp=3;
-									break;
-							case 3:              
-											if(cur_status4==0x0037)
-											 servo4_on = 1;											
-									break;            
-							default :
-									servo4_on_setp=1;
-									outputs4->ControlWord = 0x06;//0x6040
-							break;
-					}
-					switch(servo5_on_setp)
-					{
-							case 1:
-								outputs5->ControlWord = 0x07;//0x6040
-								if(cur_status5 == 0x0031)
-											 servo5_on_setp=2;
-									break;
-							case 2:
-									outputs5->ControlWord = 0x0F;             
-											if(cur_status5==0x0033)
-											 servo5_on_setp=3;											
-									break;
-							case 3:              
-											if(cur_status5==0x0037)
-											 servo5_on = 1;											
-									break;            
-							default :
-									servo5_on_setp=1;
-									outputs5->ControlWord = 0x06;//0x6040
-							break;
-					}
-					switch(servo6_on_setp)
-					{
-							case 1:
-								outputs6->ControlWord = 0x07;//0x6040
-								if(cur_status6 == 0x0031)
-											 servo6_on_setp=2;
-									break;
-							case 2:
-									outputs6->ControlWord = 0x0F;             
-											if(cur_status6==0x0033)
-											 servo6_on_setp=3;
-									break;
-							case 3:              
-											if(cur_status6==0x0037)
-											 servo6_on = 1;											
-									break;            
-							default :
-									servo6_on_setp=1;
-									outputs6->ControlWord = 0x06;//0x6040
-							break;
-					}
-					switch(servo7_on_setp)
-					{
-							case 1:
-								outputs7->ControlWord = 0x07;//0x7040
-								if(cur_status7 == 0x0031)
-											 servo7_on_setp=2;
-									break;
-							case 2:
-									outputs7->ControlWord = 0x0F;             
-											if(cur_status7==0x0033)
-											 servo7_on_setp=3;
-									break;
-							case 3:              
-											if(cur_status7==0x0037)
-											 servo7_on = 1;											
-									break;            
-							default :
-									servo7_on_setp=1;
-									outputs7->ControlWord = 0x06;//0x6040
-							break;
-					}
-					switch(servo8_on_setp)
-					{
-							case 1:
-								outputs8->ControlWord = 0x07;//0x7040
-								if(cur_status8 == 0x0031)
-											 servo8_on_setp=2;
-									break;
-							case 2:
-									outputs8->ControlWord = 0x0F;             
-											if(cur_status8==0x0033)
-											 servo8_on_setp=3;
-									break;
-							case 3:              
-											if(cur_status8==0x0037)
-											 servo8_on = 1;											
-									break;            
-							default :
-									servo8_on_setp=1;
-									outputs8->ControlWord = 0x06;//0x6040
-							break;
-					}
-			
-          if(servo1_on == 1 && servo2_on == 1  && servo3_on == 1 && servo4_on == 1 &&
-						 servo5_on == 1 && servo6_on == 1  && servo8_on == 1 && servo8_on == 1
-					){
+				}
+        
+				/* 当8个伺服电机进入OP状态*/
+				if(servo_on[1] == 1 && servo_on[2] == 1  && servo_on[3] == 1 && servo_on[4] == 1 &&
+					 servo_on[5] == 1 && servo_on[6] == 1  && servo_on[7] == 1 && servo_on[8] == 1
+				){
 						
 					  //点亮绿色警示灯
 			     GPIO_SetBits(GPIOE,GPIO_Pin_12);
 						
 					 RS485_06H = 0x03;
 
-           outputs1->TargetMode = 0x3;
-				   outputs1->ControlWord = 0xf;
-  				 outputs1->TargetVelocity = V_1 * 12145423; //
-				   outputs1->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min						
+           outputs[1]->TargetMode = 0x3;
+				   outputs[1]->ControlWord = 0xf;
+  				 outputs[1]->TargetVelocity = V_1 * 12145423; //
+				   outputs[1]->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min						
 				
-					 outputs2->TargetMode = 0x1;
-				   outputs2->ControlWord = 0x103f;
-				   outputs2->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
-				   outputs2->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
+					 outputs[2]->TargetMode = 0x1;
+				   outputs[2]->ControlWord = 0x103f;
+				   outputs[2]->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
+				   outputs[2]->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
 				   
-				   outputs3->TargetMode = 0x3;
-				   outputs3->ControlWord = 0xf;
-  				 outputs3->TargetVelocity = V_2 * 12145423; //
-				   outputs3->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min
+				   outputs[3]->TargetMode = 0x3;
+				   outputs[3]->ControlWord = 0xf;
+  				 outputs[3]->TargetVelocity = V_2 * 12145423; //
+				   outputs[3]->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min
 				
-					 outputs4->TargetMode = 0x1;
-				   outputs4->ControlWord = 0x103f;
-				   outputs4->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
-				   outputs4->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
+					 outputs[4]->TargetMode = 0x1;
+				   outputs[4]->ControlWord = 0x103f;
+				   outputs[4]->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
+				   outputs[4]->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
 				
-				   outputs5->TargetMode = 0x3;
-				   outputs5->ControlWord = 0xf;
-				   outputs5->TargetVelocity = V_3 * 12145423; // 					 
-				   outputs5->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min
+				   outputs[5]->TargetMode = 0x3;
+				   outputs[5]->ControlWord = 0xf;
+				   outputs[5]->TargetVelocity = V_3 * 12145423; // 					 
+				   outputs[5]->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min
 				
-					 outputs6->TargetMode = 0x1;
-				   outputs6->ControlWord = 0x103f;
-				   outputs6->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
-				   outputs6->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
+					 outputs[6]->TargetMode = 0x1;
+				   outputs[6]->ControlWord = 0x103f;
+				   outputs[6]->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
+				   outputs[6]->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
 				   
-				   outputs7->TargetMode = 0x3;
-				   outputs7->ControlWord = 0xf;
-				   outputs7->TargetVelocity = V_4 * 12145423; // 3000rpm/min
-				   outputs7->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min
+				   outputs[7]->TargetMode = 0x3;
+				   outputs[7]->ControlWord = 0xf;
+				   outputs[7]->TargetVelocity = V_4 * 12145423; // 3000rpm/min
+				   outputs[7]->TrapezoidVelocity = 0.1 * 2731000; // 1000rpm/min
 				
-					 outputs8->TargetMode = 0x1;
-				   outputs8->ControlWord = 0x103f;
-				   outputs8->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
-				   outputs8->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
+					 outputs[8]->TargetMode = 0x1;
+				   outputs[8]->ControlWord = 0x103f;
+				   outputs[8]->TargetVelocity = 0.3 * 1.6 * 32772000; // 3000rpm/min
+				   outputs[8]->TrapezoidVelocity = 1.02 * 1.2 * 32772000; // 2000rpm/min
 									
   			  for(int i = 1 ;i <= 8;i++){	
 						
-						       if(i == 1) cur_pos[1] = inputs1->CurrentPosition;
-						  else if(i == 2) cur_pos[2] = inputs2->CurrentPosition;
-						  else if(i == 3) cur_pos[3] = inputs3->CurrentPosition;
-						  else if(i == 4) cur_pos[4] = inputs4->CurrentPosition;
-						  else if(i == 5) cur_pos[5] = inputs5->CurrentPosition;
-						  else if(i == 6) cur_pos[6] = inputs6->CurrentPosition;
-						  else if(i == 7) cur_pos[7] = inputs7->CurrentPosition;
-						  else if(i == 8) cur_pos[8] = inputs8->CurrentPosition;
+						       if(i == 1) cur_pos[1] = inputs[1]->CurrentPosition;
+						  else if(i == 2) cur_pos[2] = inputs[2]->CurrentPosition;
+						  else if(i == 3) cur_pos[3] = inputs[3]->CurrentPosition;
+						  else if(i == 4) cur_pos[4] = inputs[4]->CurrentPosition;
+						  else if(i == 5) cur_pos[5] = inputs[5]->CurrentPosition;
+						  else if(i == 6) cur_pos[6] = inputs[6]->CurrentPosition;
+						  else if(i == 7) cur_pos[7] = inputs[7]->CurrentPosition;
+						  else if(i == 8) cur_pos[8] = inputs[8]->CurrentPosition;
 						
 					}							  
 					
-					 temp1 = angle_1 / (2 * M_PI) * 65536 * 275;
+					 temp[1] = angle_1 / (2 * M_PI) * 65536 * 275;
 			
-					 if(abs(cur_pos[2] - temp1) > 40000 ) {									 
-						 outputs2->TargetPos =   angle_1 / (2 * M_PI) * 65536 * 275;						 
-						 temp2 = outputs2->TargetPos;                 							 
+					 if(abs(cur_pos[2] - temp[1]) > 40000 ) {									 
+						 outputs[2]->TargetPos =   angle_1 / (2 * M_PI) * 65536 * 275;						 
+						 temp[2] = outputs[2]->TargetPos;                 							 
 					 }else{							
-						outputs2->TargetPos = temp2;															 
+						outputs[2]->TargetPos = temp[2];															 
 					 }
 					 
-					 temp3 =  angle_2 / (2 * M_PI) * 65536 * 275;
+					 temp[3] =  angle_2 / (2 * M_PI) * 65536 * 275;
 
-					 if(abs(cur_pos[4] - temp3) > 40000 ) {
-						 outputs4->TargetPos =  angle_2 / (2 * M_PI) * 65536 * 275;	   
-						 temp4 = outputs4->TargetPos;		 
+					 if(abs(cur_pos[4] - temp[3]) > 40000 ) {
+						 outputs[4]->TargetPos =  angle_2 / (2 * M_PI) * 65536 * 275;	   
+						 temp[4] = outputs[4]->TargetPos;		 
 					 }else{														    
-						outputs4->TargetPos = temp4;										 
+						outputs[4]->TargetPos = temp[4];										 
 					 }
 					 
-					 temp5 = angle_3 / (2 * M_PI) * 65536 * 275;
+					 temp[5] = angle_3 / (2 * M_PI) * 65536 * 275;
 
-					 if(abs(cur_pos[6] - temp5) > 40000 ) {
-						 outputs6->TargetPos =  angle_3 / (2 * M_PI) * 65536 * 275;	   
-						 temp6 = outputs6->TargetPos;		 
+					 if(abs(cur_pos[6] - temp[5]) > 40000 ) {
+						 outputs[6]->TargetPos =  angle_3 / (2 * M_PI) * 65536 * 275;	   
+						 temp[6] = outputs[6]->TargetPos;		 
 					 }else{														    
-						outputs6->TargetPos = temp6;										 
+						outputs[6]->TargetPos = temp[6];										 
 					 }
 					 
-					 temp7 = angle_4 / (2 * M_PI) * 65536 * 275;
+					 temp[7] = angle_4 / (2 * M_PI) * 65536 * 275;
 
-					 if(abs(cur_pos[8] - temp7) > 40000 ) {
-						 outputs8->TargetPos = angle_4 / (2 * M_PI) * 65536 * 275;   
-						 temp8 = outputs8->TargetPos;		 
+					 if(abs(cur_pos[8] - temp[7]) > 40000 ) {
+						 outputs[8]->TargetPos = angle_4 / (2 * M_PI) * 65536 * 275;   
+						 temp[8] = outputs[8]->TargetPos;		 
 					 }else{														    
-						outputs8->TargetPos = temp8;										 
+						outputs[8]->TargetPos = temp[8];										 
 					 }
+          
+					/* 如果出现报警，控制器设置为0x86，进行复位*/
+					for (int i = 1; i <= 8; i++) {
+						
+						if ((inputs[i]->StatusWord & 0x0008) == 0x0008) {
+								outputs[i]->ControlWord = 0x86;
+								GPIO_ResetBits(GPIOE, GPIO_Pin_12);
+						}
+						
+          }
 
-					if((inputs1->StatusWord & 0x0008) == 0x0008)
-					{
-						outputs1->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);	
-					}
-					
-					if((inputs2->StatusWord & 0x0008) == 0x0008)						
-					{
-						outputs2->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);						
-					}
-					
-					if((inputs3->StatusWord & 0x0008) == 0x0008)						
-					{
-						outputs3->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);					
-					}
-					
-					if((inputs4->StatusWord & 0x0008) == 0x0008)
-					{
-						outputs4->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);						
-					}
-					
-					if((inputs5->StatusWord & 0x0008) == 0x0008)
-					{
-						outputs5->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);					
-					}
-					
-					if((inputs6->StatusWord & 0x0008) == 0x0008)
-					{
-						outputs6->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);						
-					}
-					
-					if((inputs7->StatusWord & 0x0008) == 0x0008)
-					{						
-						outputs7->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);					
-					}
-					
-					if((inputs8->StatusWord & 0x0008) == 0x0008)
-					{
-						outputs8->ControlWord = 0x86; //
-					  GPIO_ResetBits(GPIOE,GPIO_Pin_12);						
-					}
 	  }else{
-			   //关闭绿色警示灯
+			   /*关闭绿色警示灯,代表出现故障*/
 	       GPIO_ResetBits(GPIOE,GPIO_Pin_12);		
 	  }
-	
+	    /* 发送数据 */
 			ec_send_processdata();	
 		  ec_pdo_outframe();	
 
@@ -763,12 +535,12 @@ void simpletest(char *ifname)
 						
 			 ec_dcsync0(1, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 1
 			 ec_dcsync0(2, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 2
-       ec_dcsync0(3, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 1
-			 ec_dcsync0(4, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 2 
-       ec_dcsync0(5, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 1
-			 ec_dcsync0(6, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 2 
-       ec_dcsync0(7, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 1
-			 ec_dcsync0(8, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 2 						
+       ec_dcsync0(3, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 3
+			 ec_dcsync0(4, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 4 
+       ec_dcsync0(5, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 5
+			 ec_dcsync0(6, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 6 
+       ec_dcsync0(7, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 7
+			 ec_dcsync0(8, TRUE, SYNC0TIME, 250000); // SYNC0 on slave 8 						
 									
  			 ec_set_pdo_queue(ec_config_map(&IOmap),3);
 	
@@ -833,29 +605,29 @@ void simpletest(char *ifname)
 				wkc_count = 0;
 				inOP = TRUE;
 				
-				outputs1 = (PDO_Output *)ec_slave[1].outputs;
-        inputs1  = (PDO_Input *)ec_slave[1].inputs;
+				outputs[1] = (PDO_Output *)ec_slave[1].outputs;
+        inputs[1]  = (PDO_Input *)ec_slave[1].inputs;
 				
-				outputs2 = (PDO_Output *)ec_slave[2].outputs;
-        inputs2  = (PDO_Input *)ec_slave[2].inputs;
+				outputs[2] = (PDO_Output *)ec_slave[2].outputs;
+        inputs[2]  = (PDO_Input *)ec_slave[2].inputs;
 				
-				outputs3 = (PDO_Output *)ec_slave[3].outputs;
-        inputs3  = (PDO_Input *)ec_slave[3].inputs;
+				outputs[3] = (PDO_Output *)ec_slave[3].outputs;
+        inputs[3]  = (PDO_Input *)ec_slave[3].inputs;
 				
-				outputs4 = (PDO_Output *)ec_slave[4].outputs;
-        inputs4  = (PDO_Input *)ec_slave[4].inputs;
+				outputs[4] = (PDO_Output *)ec_slave[4].outputs;
+        inputs[4]  = (PDO_Input *)ec_slave[4].inputs;
 				
-				outputs5 = (PDO_Output *)ec_slave[5].outputs;
-        inputs5  = (PDO_Input *)ec_slave[5].inputs;
+				outputs[5] = (PDO_Output *)ec_slave[5].outputs;
+        inputs[5]  = (PDO_Input *)ec_slave[5].inputs;
 				
-				outputs6 = (PDO_Output *)ec_slave[6].outputs;
-        inputs6  = (PDO_Input *)ec_slave[6].inputs;
+				outputs[6] = (PDO_Output *)ec_slave[6].outputs;
+        inputs[6]  = (PDO_Input *)ec_slave[6].inputs;
 				
-				outputs7 = (PDO_Output *)ec_slave[7].outputs;
-        inputs7  = (PDO_Input *)ec_slave[7].inputs;
+				outputs[7] = (PDO_Output *)ec_slave[7].outputs;
+        inputs[7]  = (PDO_Input *)ec_slave[7].inputs;
 				
-				outputs8 = (PDO_Output *)ec_slave[8].outputs;
-        inputs8  = (PDO_Input *)ec_slave[8].inputs;
+				outputs[8] = (PDO_Output *)ec_slave[8].outputs;
+        inputs[8]  = (PDO_Input *)ec_slave[8].inputs;
 				
 		  /* cyclic loop */
 			}else{
@@ -934,7 +706,7 @@ int main(void)
 	Debug_USART_Config();
 	
 	/* RS485初始化 */
-  RS485_Init(19200);		
+  RS485_Init(19200);
 	
 	/* ��ʼ��ϵͳ�δ�ʱ�� */	
 	SysTick_Init();
@@ -950,7 +722,7 @@ int main(void)
 	
   ethernetif_init();
 	
-	osal_usleep(50000);
+	osal_usleep(50000);					
 	
   simpletest("eth0");
 	

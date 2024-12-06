@@ -62,8 +62,7 @@ void Debug_USART_Config(void)
   USART_Cmd(DEBUG_USART, ENABLE);
 	
 	USART_ClearFlag(DEBUG_USART, USART_FLAG_TC);
-	
-	
+		
 }
 
 ///重定向c库函数printf到USART1

@@ -6,8 +6,6 @@
 
 volatile uint8_t DATA_10H[64] = {0x03,0xE8,0x0B,0xB8,0x05,0xDC,0x27,0x10,0x03,0xE8,0x88,0x13};
 
-int temp = 0;
-
 //Input the capture flag for channel 1, 
 //the capture flag for the higher bits, and the overflow flag for the lower 6 bits
 //通道1输入捕获标志，高两位做捕获标志，低6位做溢出标志		
@@ -48,7 +46,7 @@ int FLAG_03 = 0;
 int FLAG_10 = 0;
 
 //循环发送06命令写数据标志
-int FLAG_06 = 0;
+//int FLAG_06 = 0;
 
 //Default speed of remote control car, unit: mm/s
 //遥控小车的默认速度，单位：mm/s
@@ -404,15 +402,15 @@ void TIM8_UP_TIM13_IRQHandler(void)
 			 FLAG_10 = 0;		
 		}
 		
-		// 物联网模块
-		if( FLAG_06++ == 10000){	 
-			 
-			 MB_WriteHoldingReg_06H( 0x06, 1 , RS485_06H);
+//		// 物联网模块
+//		if( FLAG_06++ == 10000){	 
+//			 
+//			 MB_WriteHoldingReg_06H( 0x06, 1 , RS485_06H);
 
-//			 if(RS485_10H_FLAG == 1) RS485_10H_FLAG = 0;
-			 
-			 FLAG_06 = 0;		
-		}
+////			 if(RS485_10H_FLAG == 1) RS485_10H_FLAG = 0;
+//			 
+//			 FLAG_06 = 0;		
+//		}
 	
 		 if(Rx_flag == 1)  RS485_Receive_Data();
 			

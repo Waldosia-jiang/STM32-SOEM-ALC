@@ -33,7 +33,7 @@
   __IO  uint8_t  RS485_10H_temp1 = 0;
 	
 	__IO  uint16_t RS485_06H = 0x01;
- static uint8_t  Link_status = 0;
+        uint8_t  Link_status = 0;
  
 /* 扩展变量 ------------------------------------------------------------------*/
 /* 私有函数原形 --------------------------------------------------------------*/
@@ -156,14 +156,15 @@ void RS485_Receive_Data()
 					return ;
 		 }
 		 
-		 if(Rx_Buf[3] && 0x20 == 0x00) //失联
+		 if((Rx_Buf[4] & 0X01) == 0X01) //失联
 		 {
 			    Link_status++;
 		 }
-		 else if(Rx_Buf[3] && 0x20 == 0x20) //连接状态
+		 else if((Rx_Buf[4] & 0X01) != 0X01) //连接状态
 		 {
 			    Link_status = 0;
 		 }
+		 
 	  // 这个地方单独处理一下，因为需要考虑电压输出模块的影响，将RX_COUNT设置成13
 //	 crc_check = ((Rx_Buf[RX_COUNT-1]<<8) | Rx_Buf[RX_COUNT-2] );
 		 crc_check = ((Rx_Buf[13-1]<<8) | Rx_Buf[13-2] );
@@ -173,53 +174,50 @@ void RS485_Receive_Data()
 	
 		/* CRC 校验正确 */
 //		if(crc_check == MB_CRC16((uint8_t*) Rx_Buf , RX_COUNT-2) && (Link_status >= 10 || Link_status == 0)){
-		if(crc_check == MB_CRC16((uint8_t*) Rx_Buf , 13-2) && (Link_status >= 10 || Link_status == 0)){
+		if(crc_check == MB_CRC16((uint8_t*) Rx_Buf , 13-2) && !Link_status){
 //		if(crc_check == MB_CRC16((uint8_t*) Rx_Buf , RX_COUNT-2)){	  
 //			  printf("success \n \r");
+			  
+			  Link_status = 0;
 			
 			  Move_X =  (Rx_Buf[7] - 127) / 150.0 * vel ;
         Move_Y =  (Rx_Buf[6] - 127) / 150.0;
         Move_Z =  (Rx_Buf[8] - 127) / 150.0;
         
 			  int count = 0;
-			  // 液压阀控制
-			  
+			  			  		  
 			  // 主爪抓
 			  if((Rx_Buf[3] & 0X01) == 0X01 && count == 0){				    
+					GPIO_SetBits(GPIOE,GPIO_Pin_0);
+					count++;
+				}else GPIO_ResetBits(GPIOE,GPIO_Pin_0);
+        
+        // 主爪松
+//			  if((Rx_Buf[3] & 0X02) == 0X02 && count == 0 && (Rx_Buf[5] & 0X04) == 0X04){	
+        if((Rx_Buf[3] & 0X02) == 0X02 && count == 0 && (Rx_Buf[5] & 0X40) == 0X40){				    
+					GPIO_SetBits(GPIOE,GPIO_Pin_1);
+					count++; 
+				}else GPIO_ResetBits(GPIOE,GPIO_Pin_1);
+				
+        
+        // 副爪正向
+			  if((Rx_Buf[3] & 0X04) == 0X04 && count == 0){				    
+					GPIO_SetBits(GPIOE,GPIO_Pin_2);
+					count++;
+				}else GPIO_ResetBits(GPIOE,GPIO_Pin_2);
+				       
+        // 副爪反向
+			  if((Rx_Buf[3] & 0X08) == 0X08 && count == 0){				    
 					GPIO_SetBits(GPIOE,GPIO_Pin_3);
 					count++;
 				}else GPIO_ResetBits(GPIOE,GPIO_Pin_3);
         
-        // 主爪松
-			  if((Rx_Buf[3] & 0X02) == 0X02 && count == 0){				    
-					GPIO_SetBits(GPIOE,GPIO_Pin_8);
-					count++;
-				}else GPIO_ResetBits(GPIOE,GPIO_Pin_8);
-        
-        // 副爪抓
-			  if((Rx_Buf[3] & 0X04) == 0X04 && count == 0){				    
+				
+        // 平爪收
+			  if((Rx_Buf[4] & 0X04) == 0X04 && count == 0){				    
 					GPIO_SetBits(GPIOE,GPIO_Pin_4);
 					count++;
 				}else GPIO_ResetBits(GPIOE,GPIO_Pin_4);
-        
-        // 副爪松
-			  if((Rx_Buf[3] & 0X08) == 0X08 && count == 0){				    
-					GPIO_SetBits(GPIOE,GPIO_Pin_9);
-					count++;
-				}else GPIO_ResetBits(GPIOE,GPIO_Pin_9);
-        
-        // 液压电机
-			  if((Rx_Buf[3] & 0X10) == 0X10){				    
-					GPIO_SetBits(GPIOE,GPIO_Pin_11);
-						
-				}else GPIO_ResetBits(GPIOE,GPIO_Pin_11);
-                     
-        
-        // 平爪收
-			  if((Rx_Buf[4] & 0X04) == 0X04 && count == 0){				    
-					GPIO_SetBits(GPIOE,GPIO_Pin_0);
-					count++;
-				}else GPIO_ResetBits(GPIOE,GPIO_Pin_0);
         
         // 平爪放
 			  if((Rx_Buf[4] & 0X08) == 0X08 && count == 0){				    
@@ -235,30 +233,36 @@ void RS485_Receive_Data()
         
         // 下降
 			  if((Rx_Buf[4] & 0X20) == 0X20 && count == 0){				    
-					GPIO_SetBits(GPIOE,GPIO_Pin_1);
-					count++;
-				}else GPIO_ResetBits(GPIOE,GPIO_Pin_1);
-        
-        // 前移
-			  if((Rx_Buf[4] & 0X40) == 0X40 && count == 0){				    
 					GPIO_SetBits(GPIOE,GPIO_Pin_7);
 					count++;
 				}else GPIO_ResetBits(GPIOE,GPIO_Pin_7);
         
+        // 前移
+			  if((Rx_Buf[4] & 0X40) == 0X40 && count == 0){				    
+					GPIO_SetBits(GPIOE,GPIO_Pin_8);
+					count++;
+				}else GPIO_ResetBits(GPIOE,GPIO_Pin_8);
+        
         // 后移
 			  if((Rx_Buf[4] & 0X80) == 0X80 && count == 0){				    
-					GPIO_SetBits(GPIOE,GPIO_Pin_2);
+					GPIO_SetBits(GPIOE,GPIO_Pin_9);
 					count++;
-				}else GPIO_ResetBits(GPIOE,GPIO_Pin_2);
+				}else GPIO_ResetBits(GPIOE,GPIO_Pin_9);
 				
+				 // 液压电机
+			  if((Rx_Buf[3] & 0X10) == 0X10){				    
+					GPIO_SetBits(GPIOE,GPIO_Pin_10);							
+				}else {
+					GPIO_ResetBits(GPIOE,GPIO_Pin_10);				
+				}             				
          // 控制24V建压电磁阀 				
-				if(count == 1) GPIO_SetBits(GPIOE,GPIO_Pin_10);
-				else GPIO_ResetBits(GPIOE,GPIO_Pin_10);
+				if(count == 1) GPIO_SetBits(GPIOE,GPIO_Pin_11);
+				else GPIO_ResetBits(GPIOE,GPIO_Pin_11);				
 				
         // 高速模式,默认中等速度模式（底盘）
 			  if((Rx_Buf[5] & 0X01) == 0X01) vel = 1.2;				    
         // 正常模式
-				else if((Rx_Buf[5] & 0X03) == 0X00) vel = 0.3;			 
+				else if((Rx_Buf[5] & 0X03) == 0X00) vel = 0.6;			 
         // 低速模式
 			  else if((Rx_Buf[5] & 0X02) == 0X02) vel = 0.075;
 				
@@ -266,11 +270,13 @@ void RS485_Receive_Data()
         // 高速模式,默认低速模式（液压）
 			  if((Rx_Buf[5] & 0X10) == 0X10){				    
 					  vel_yy = 0.7;
+					   //总阀开单独控制转不动的情况
+					  if((Rx_Buf[5] & 0X04) == 0X04) vel_yy = 1.2; 
 					  RS485_10H_temp = 0X10;
 				}			
 				// 正常模式,默认正常模式（液压）
 			  else if((Rx_Buf[5] & 0X30) == 0X00){				    
-					  vel_yy = 0.4;
+					  vel_yy = 0.3;
 					  RS485_10H_temp = 0X00;
 				}
         // 低速模式
@@ -285,8 +291,10 @@ void RS485_Receive_Data()
 				RS485_10H_temp1 = RS485_10H_temp;
         	  			
 					  
-			}else{
-
+			}else if(Link_status > 10){
+				 	
+          vel = 0.0;
+          vel_yy = 0.0;				
 					printf("error \n \r");
 				
 		  };

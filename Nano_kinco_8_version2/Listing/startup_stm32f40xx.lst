@@ -859,12 +859,13 @@ ARM Macro Assembler    Page 14
               00000000 
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4.fp --apcs=int
 erwork --depend=..\..\output\startup_stm32f40xx.d -o..\..\output\startup_stm32f
-40xx.o -I.\RTE\_SOEM_STM32 -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\5.4.0\CMSIS\Core\Inc
-lude -IC:\Keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.13.0\Drivers\CMSIS\Device\ST\ST
-M32F4xx\Include --predefine="__MICROLIB SETA 1" --predefine="__UVISION_VERSION 
-SETA 526" --predefine="_RTE_ SETA 1" --predefine="STM32F407xx SETA 1" --list=..
-\..\listing\startup_stm32f40xx.lst ..\..\Libraries\CMSIS\Device\ST\STM32F4xx\So
-urce\Templates\arm\startup_stm32f40xx.s
+40xx.o -IE:\ALC条板程序开发\底盘代码\版本03_工业遥控器（新板子）\Nano_kinco_8_v
+ersion2\Project\RVMDK(uv5)\RTE -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\4.5.0\CMSIS\Incl
+ude -IC:\Keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.11.0\Drivers\CMSIS\Device\ST\STM
+32F4xx\Include --predefine="__MICROLIB SETA 1" --predefine="__UVISION_VERSION S
+ETA 521" --predefine="_RTE_ SETA 1" --predefine="STM32F407xx SETA 1" --list=..\
+..\listing\startup_stm32f40xx.lst ..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Sou
+rce\Templates\arm\startup_stm32f40xx.s
 
 
 
